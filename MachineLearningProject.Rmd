@@ -1,0 +1,95 @@
+---
+title: "Machine Learning Project"
+author: "AK Patel"
+date: "6/17/2017"
+output: html_document
+---
+###Introduction
+In this project we take the data from 6 participant's personal activity device while they were asked to perform Unilateral Dumbbell Biceps Curl in 5 different fashion.  The first class (Class A) represented the proper execution of the exercise.  While the other 4 (Class B thru E) represented common mistakes.  Our task was to take the data provided by the personal activity devices and see if we could accurately determine if the individual was performing the exercise correctly, and if not what kind of mistake they were making.
+
+
+###Load Libraries and Read files
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(caret)
+library(ggplot2)
+
+## load file s## set working environment to desktop
+setwd("~/Desktop/Project")
+
+## download files
+urlTraining <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+urlTesting <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(urlTraining, destfile = "./training.csv")
+download.file(urlTesting, destfile = "./testing.csv")
+
+allTrain <- read.csv("./training.csv", na.strings=c("NA",""),stringsAsFactors = FALSE)
+validation <- read.csv("./testing.csv", na.strings=c("NA",""),stringsAsFactors = FALSE)
+```
+
+###Cleaning and Data Partition
+The data is divided into train, test, and validation set.  The train and test data will be used to select the best model.  The validation data will be used to determine final model out-of-sample accuracy.
+
+From the data we removed the first 7 columns that are not relevant to our model.  We also removed multiple columns in which the data is missing.
+```{r Data Cleaning and Partition}
+## subset files into train, test, and validation
+allTrain <- allTrain[,-which(is.na(allTrain[1,]))]
+validation <- validation[,-which(is.na(validation[1,]))]
+allTrain <- allTrain[,-c(1:7)]
+validation <- validation[,-c(1:7)]
+inTrain <- createDataPartition(allTrain$classe, p = 0.7, list = FALSE)
+training <- allTrain[inTrain, ]
+testing <- allTrain[-inTrain, ]
+
+dim(training)
+dim(testing)
+dim(validation)
+```
+
+
+### Model Building
+We select K-Fold Cross-Validation technique to help minimize overfitting problem associated with model building.  We select only 5 k-folds because of limitation to computing power.  
+
+Again for brevity, we decide to use only 2 models (Decision Tree and Random Forest).  Both models are better suited for classification problems where data may not be linear in nature.  The Decision Tree is a baseline model that runs quicker than Random Forest, which is highly iterative with multiple sub-sampling.  The latter generally performs better in real world accuracy test with a trade-off speed and interpretibility.
+```{r Model Building, echo=FALSE}
+## k-fold
+control <- trainControl(method = "cv", number = 5)
+
+## Decision Tree
+modRPART <- train(classe ~ ., data = training, method = "rpart", trControl = control)
+predictRPART <- predict(modRPART, newdata = testing)
+
+## Random Forest
+modRF <- train(classe ~ ., data = training, method = "rf", trControl = control)
+predictRF <- predict(modRF, newdata = testing)
+
+```
+
+### Model Selection
+From the resulting matrix of the two models, we see that the Random Forest algorithm is substantially better in predicting our test variables, with an accuracy of 99.3%, putting the out-of-sample error of just 0.7%.
+```{r Model Selection, echo=TRUE}
+confusionMatrix(predictRPART, testing$classe)
+confusionMatrix(predictRF, testing$classe)
+```
+
+###Random Forest Model
+Some details regarding our model.  Of 52 variable used for prediction, we show the ranking of importance of the individual variables in the plot.
+```{r Random Forest Model}
+print(modRF$finalModel)
+plot(varImp(modRF))
+```
+
+
+###Validation
+We use our Random Forest model to test against the validation dataset.  The dataset is small, with only 20 observations, hence there is a possibility that we may see slightly lower accuracy than what we observed on our test case.
+```{r Validation}
+predictValidation <- predict(modRF, newdata = validation)
+predictValidation
+```
+
+
+###Acknowledgment
+We thankfully acknowledge the following for study parameters and source data:
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz4kHN7DIHC
